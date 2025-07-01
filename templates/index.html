@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Food Analyzer</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/health-data-client@1.0.0/dist/health-data.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      /* Spinner animation */
+      .animate-spin {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      
+      /* Ripple effect for tap feedback */
+      .animate-ripple {
+        animation: ripple 1s ease-out forwards;
+      }
+      @keyframes ripple {
+        from {
+          transform: translate(-50%, -50%) scale(0.5);
+          opacity: 0.5;
+        }
+        to {
+          transform: translate(-50%, -50%) scale(2);
+          opacity: 0;
+        }
+      }
+      
+      /* Timer pulse animation */
+      .animate-pulse {
+        animation: pulse 0.2s ease-in-out;
+      }
+      @keyframes pulse {
+        0% {
+          transform: translate(-50%, -50%) scale(1);
+        }
+        50% {
+          transform: translate(-50%, -50%) scale(1.2);
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(1);
+        }
+      }
+      
+      /* Capture frame focus area */
+      #captureFrame:active .focus-area {
+        border-color: rgba(255, 255, 255, 0.8);
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+      <h1 class="text-3xl font-bold text-center mb-8">
+        Food Nutrition Analyzer
+      </h1>
+
+      <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
+        <div class="mb-4">
+          <div
+            class="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center"
+          >
+            <input
+              type="file"
+              id="imageInput"
+              accept="image/*"
+              class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+            <div class="space-y-1 text-center">
+              <svg
+                class="mx-auto h-12 w-12 text-gray-400"
+                stroke="currentColor"
+                fill="none"
+                viewBox="0 0 48 48"
+              >
+                <path
+                  d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <div class="text-sm text-gray-600">
+                <label
+                  for="imageInput"
+                  class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  Upload a photo
+                </label>
+                or drag and drop
+              </div>
+              <p class="text-xs text-gray-500">PNG, JPG up to 10MB</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="imagePreview" class="hidden mb-4 relative">
+          <img
+            id="preview"
+            src=""
+            alt="Preview"
+            class="max-w-full h-auto rounded-lg"
+          />
+          <div
+            id="annotations"
+            class="absolute top-0 left-0 w-full h-full"
+          ></div>
+        </div>
+
+        <button
+          id="analyzeBtn"
+          class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          disabled
+        >
+          Analyze Food
+        </button>
+
+        <div id="result" class="mt-4 hidden">
+          <h2 class="text-xl font-semibold mb-2">Analysis Results</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <h3 class="font-semibold mb-2">Overall Nutrition</h3>
+              <div id="totalNutrition"></div>
+              <canvas id="macroChart" class="mt-4"></canvas>
+              <div id="dailyValue" class="mt-2"></div>
+              <div
+                id="healthScore"
+                class="mt-4 p-3 bg-white rounded-lg border border-gray-200"
+              >
+                <!-- Health score will be inserted here -->
+              </div>
+            </div>
+
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <h3 class="font-semibold mb-2">Detailed Analysis</h3>
+              <div id="foodDetails"></div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex justify-center">
+            <button
+              onclick="updateMealHistory()"
+              class="bg-indigo-600 text-white py-2 px-6 rounded-full hover:bg-indigo-700 transition-colors shadow-md"
+            >
+              View Meal History
+            </button>
+          </div>
+        </div>
+
+        <div id="error" class="mt-4 hidden">
+          <div
+            class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+          >
+            <strong class="font-bold">Error!</strong>
+            <span id="errorContent" class="block sm:inline"></span>
+          </div>
+        </div>
+
+        <div id="loading" class="hidden mt-4 text-center">
+          <div
+            class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"
+          ></div>
+          <p class="mt-2 text-gray-600">Analyzing your food...</p>
+        </div>
+
+        <div class="mt-4 flex space-x-4">
+          <button
+            id="speakButton"
+            class="bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700"
+          >
+            <svg
+              class="w-5 h-5 inline-block mr-1"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+              />
+            </svg>
+            Read Analysis
+          </button>
+
+          <button
+            id="syncHealthApp"
+            class="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
+          >
+            Sync to Health App
+          </button>
+
+          <button
+            id="startAR"
+            class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700"
+          >
+            Start AR Scanner
+          </button>
+        </div>
+
+        <div id="mealHistory" class="mt-8 hidden">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Meal History</h2>
+            <button
+              onclick="clearMealHistory()"
+              class="bg-red-100 text-red-600 px-3 py-1 rounded-full hover:bg-red-200 transition-colors text-sm"
+            >
+              Clear History
+            </button>
+          </div>
+          <div id="historyContent" class="space-y-4"></div>
+        </div>
+
+        <!-- AR Scanner Container -->
+        <div id="arContainer" class="fixed inset-0 bg-black z-50 hidden">
+          <video
+            id="arVideo"
+            class="absolute inset-0 w-full h-full object-cover"
+            autoplay
+            playsinline
+          ></video>
+          
+          <!-- Capture Frame -->
+          <div id="captureFrame" class="absolute inset-0 cursor-pointer">
+            <p class="absolute top-8 left-1/2 transform -translate-x-1/2 text-white text-opacity-70 text-sm bg-black bg-opacity-50 px-3 py-1 rounded-full">Tap anywhere to capture</p>
+          </div>
+          
+          <!-- Timer Display -->
+          <div id="timerDisplay" class="hidden absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-6xl font-bold z-20"></div>
+          
+          <!-- Controls -->
+          <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex items-center space-x-4">
+            <button
+              id="timerButton"
+              class="bg-white text-black p-3 rounded-full shadow-lg hover:bg-gray-200 transition-colors"
+            >
+              ⏲️ Timer
+            </button>
+          </div>
+          
+          <!-- Close Button -->
+          <button
+            onclick="closeARScanner()"
+            class="absolute top-4 right-4 text-white p-2 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75"
+          >
+            ✕
+          </button>
+          
+          <!-- Mobile controls -->
+          <div class="absolute bottom-8 left-0 right-0 flex justify-center items-center space-x-4 px-4 z-20">
+            <!-- Timer button -->
+            <button
+              id="timerButton"
+              class="bg-white text-black p-3 rounded-full shadow-lg flex items-center justify-center w-12 h-12"
+            >
+              ⏱️
+            </button>
+            
+            <!-- Instructions -->
+            <div class="text-white text-center text-lg bg-black bg-opacity-50 px-4 py-2 rounded-lg">
+              Tap anywhere on screen to capture
+              <div class="text-sm opacity-75">Or use timer for hands-free capture</div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="compareModal"
+          class="fixed inset-0 bg-black bg-opacity-50 hidden"
+        >
+          <div class="bg-white p-6 rounded-lg max-w-4xl mx-auto mt-20">
+            <h3 class="text-xl font-bold mb-4">Compare Meals</h3>
+            <div class="grid grid-cols-2 gap-4">
+              <div id="meal1" class="border p-4 rounded">
+                <!-- Current meal data -->
+              </div>
+              <div id="meal2" class="border p-4 rounded">
+                <input
+                  type="file"
+                  id="compareMealInput"
+                  accept="image/*"
+                  class="mb-4"
+                />
+                <!-- Second meal data will appear here -->
+              </div>
+            </div>
+            <button
+              id="closeCompare"
+              class="mt-4 bg-gray-600 text-white py-2 px-4 rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="tooltip"
+      class="hidden fixed bg-white p-3 rounded-lg shadow-lg border border-gray-200 max-w-xs z-50"
+    ></div>
+
+    <script>
+      const imageInput = document.getElementById("imageInput");
+      const imagePreview = document.getElementById("imagePreview");
+      const preview = document.getElementById("preview");
+      const analyzeBtn = document.getElementById("analyzeBtn");
+      const result = document.getElementById("result");
+      const resultContent = document.getElementById("resultContent");
+      const loading = document.getElementById("loading");
+      const speakButton = document.getElementById("speakButton");
+      const syncHealthApp = document.getElementById("syncHealthApp");
+      const startARButton = document.getElementById("startAR");
+
+      startARButton.addEventListener("click", () => {
+        // Hide main content and show AR scanner
+        document.getElementById("arContainer").classList.remove("hidden");
+        // Initialize AR scanner
+        setupAR();
+      });
+
+      imageInput.addEventListener("change", function (e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            preview.src = e.target.result;
+            imagePreview.classList.remove("hidden");
+            analyzeBtn.disabled = false;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      function showTooltip(event, content) {
+        const tooltip = document.getElementById("tooltip");
+        tooltip.innerHTML = content;
+        tooltip.style.left = `${event.pageX + 10}px`;
+        tooltip.style.top = `${event.pageY + 10}px`;
+        tooltip.classList.remove("hidden");
+      }
+
+      function hideTooltip() {
+        document.getElementById("tooltip").classList.add("hidden");
+      }
+
+      function createFoodAnnotation(food, imageWidth, imageHeight) {
+        const pos = food.position;
+        const annotation = document.createElement("div");
+        annotation.className = "absolute border-2 border-indigo-500";
+        annotation.style.left = `${pos.x * 100}%`;
+        annotation.style.top = `${pos.y * 100}%`;
+        annotation.style.width = `${pos.width * 100}%`;
+        annotation.style.height = `${pos.height * 100}%`;
+
+        const label = document.createElement("div");
+        label.className =
+          "absolute -top-6 left-0 bg-indigo-500 text-white px-2 py-1 text-sm rounded";
+        label.textContent = `${food.name} (${food.confidence}%)`;
+
+        annotation.appendChild(label);
+        return annotation;
+      }
+
+      analyzeBtn.addEventListener("click", async function () {
+        const file = imageInput.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("image", file);
+
+        loading.classList.remove("hidden");
+        result.classList.add("hidden");
+        document.getElementById("error").classList.add("hidden");
+        analyzeBtn.disabled = true;
+
+        try {
+          const response = await fetch("/analyze", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await response.json();
+
+          if (data.error) {
+            document.getElementById("errorContent").textContent = data.error;
+            document.getElementById("error").classList.remove("hidden");
+          } else {
+            // Process and display the analysis results using the shared function
+            processAnalysisResults(data);
+            saveMealToHistory(data);
+          }
+        } catch (error) {
+          document.getElementById("errorContent").textContent = error.message;
+          document.getElementById("error").classList.remove("hidden");
+        } finally {
+          loading.classList.add("hidden");
+          analyzeBtn.disabled = false;
+        }
+      });
+
+      let currentChart = null;
+      
+      function createMacroChart(data) {
+        // Destroy existing chart if it exists
+        if (currentChart) {
+          currentChart.destroy();
+        }
+        
+        const ctx = document.getElementById("macroChart").getContext("2d");
+        currentChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: ["Carbs", "Protein", "Fat"],
+            datasets: [
+              {
+                data: [data.total.carbs, data.total.proteins, data.total.fats],
+                backgroundColor: [
+                  "rgb(59, 130, 246)",
+                  "rgb(239, 68, 68)",
+                  "rgb(234, 179, 8)",
+                ],
+              },
+            ],
+          },
+          options: {
+            plugins: {
+              legend: {
+                display: false,
+              },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: "Grams",
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function updateServingSize(foodIndex, change) {
+        const data = JSON.parse(localStorage.getItem("lastAnalysis"));
+        const food = data.foods[foodIndex];
+        const serving = food.nutrition.serving_multiplier || 1;
+        food.nutrition.serving_multiplier = Math.max(0.5, serving + change);
+
+        // Recalculate totals
+        recalculateTotals(data);
+        updateDisplayedNutrition(data);
+      }
+
+      // Save meal to history after analysis
+      function saveMealToHistory(data) {
+        let history = JSON.parse(localStorage.getItem("mealHistory") || "[]");
+        history.push({
+          ...data,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Keep only last 10 meals
+        if (history.length > 10) {
+          history = history.slice(-10);
+        }
+        
+        localStorage.setItem("mealHistory", JSON.stringify(history));
+        updateMealHistory();
+      }
+      
+      // Update meal history display
+      function updateMealHistory() {
+        const history = JSON.parse(localStorage.getItem("mealHistory") || "[]");
+        const historyContent = document.getElementById("historyContent");
+        const mealHistory = document.getElementById("mealHistory");
+        
+        if (history.length === 0) {
+          historyContent.innerHTML = '<p class="text-gray-500">No meal history available</p>';
+          mealHistory.classList.add("hidden");
+          return;
+        }
+        
+        mealHistory.classList.remove("hidden");
+        historyContent.innerHTML = history.reverse().map((meal) => `
+          <div class="bg-white p-4 rounded-lg shadow-md mb-4">
+            <div class="flex justify-between items-center">
+              <h3 class="font-semibold">${new Date(meal.timestamp).toLocaleString()}</h3>
+            </div>
+            <div class="mt-2">
+              <p>${meal.foods.map(f => f.name).join(", ")}</p>
+              <p class="text-sm text-gray-600 mt-1">Calories: ${meal.total.calories} kcal</p>
+            </div>
+          </div>
+        `).join('');
+      }
+      
+      // Clear meal history
+      function clearMealHistory() {
+        if (confirm('Are you sure you want to clear your meal history? This cannot be undone.')) {
+          localStorage.removeItem("mealHistory");
+          document.getElementById("mealHistory").classList.add("hidden");
+          document.getElementById("historyContent").innerHTML = '<p class="text-gray-500">No meal history available</p>';
+        }
+      }
+
+      // Voice narration
+      function speakAnalysis(data) {
+        const speech = new SpeechSynthesisUtterance();
+        speech.text = `Analysis complete. Found ${data.foods.length} items. `;
+        data.foods.forEach((food) => {
+          speech.text += `${food.name} with ${food.nutrition.calories} calories. `;
+        });
+        speech.text += `Total calories: ${data.total.calories}. Health score: ${data.health_score} out of 10.`;
+        window.speechSynthesis.speak(speech);
+      }
+
+      // Health app integration
+      async function syncWithHealthApp(data) {
+        try {
+          const healthClient = new HealthDataClient();
+          await healthClient.requestAuthorization(["calories"]);
+          await healthClient.writeData({
+            type: "calories",
+            value: data.total.calories,
+            date: new Date(),
+          });
+          alert("Successfully synced with health app!");
+        } catch (error) {
+          alert("Failed to sync with health app: " + error.message);
+        }
+      }
+
+      // AR Scanner setup
+      let videoStream = null;
+      let isTimerActive = false;
+      let timerSeconds = 0;
+      let timerInterval = null;
+      
+      async function setupAR() {
+        try {
+          // Request camera with high resolution for better food detection
+          const constraints = {
+            video: {
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              facingMode: "environment", // Use back camera on mobile devices
+              frameRate: { ideal: 30 },
+              focusMode: "continuous", // Enable continuous autofocus if available
+            }
+          };
+          
+          videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+          const video = document.getElementById("arVideo");
+          video.srcObject = videoStream;
+          
+          // Wait for video to be ready before allowing capture
+          video.onloadedmetadata = () => {
+            video.play();
+            // Reset any previous error messages
+            document.getElementById("error").classList.add("hidden");
+          };
+          
+          const arContainer = document.getElementById("arContainer");
+          const timerButton = document.getElementById("timerButton");
+          const timerDisplay = document.getElementById("timerDisplay");
+          const captureFrame = document.getElementById("captureFrame");
+          
+          // Setup tap-to-capture
+          captureFrame.addEventListener("click", (e) => {
+            // Ignore clicks if timer is active
+            if (!isTimerActive) {
+              // Visual feedback for tap
+              const ripple = document.createElement("div");
+              ripple.className = "absolute w-20 h-20 bg-white rounded-full opacity-50 transform -translate-x-1/2 -translate-y-1/2 animate-ripple";
+              ripple.style.left = e.clientX + "px";
+              ripple.style.top = e.clientY + "px";
+              captureFrame.appendChild(ripple);
+              
+              // Remove ripple after animation
+              setTimeout(() => ripple.remove(), 1000);
+              
+              captureAndAnalyze(video);
+            }
+          });
+          
+          // Setup timer functionality
+          timerButton.addEventListener("click", () => {
+            if (isTimerActive) {
+              // Cancel timer
+              clearInterval(timerInterval);
+              isTimerActive = false;
+              timerDisplay.classList.add("hidden");
+              timerButton.classList.remove("bg-blue-500");
+            } else {
+              // Start timer cycle: 0s -> 3s -> 5s -> 10s -> 0s
+              timerSeconds = timerSeconds === 10 ? 0 : 
+                            timerSeconds === 5 ? 10 :
+                            timerSeconds === 3 ? 5 :
+                            3;
+              
+              if (timerSeconds === 0) {
+                timerButton.classList.remove("bg-blue-500");
+                timerDisplay.classList.add("hidden");
+              } else {
+                timerButton.classList.add("bg-blue-500");
+                startTimer(video, timerSeconds);
+              }
+            }
+          });
+          
+          // Add loading indicator (initially hidden)
+          const loadingIndicator = document.createElement("div");
+          loadingIndicator.id = "arLoadingIndicator";
+          loadingIndicator.className = "absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden z-30";
+          loadingIndicator.innerHTML = `
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-white"></div>
+            <p class="text-white ml-4">Analyzing...</p>
+          `;
+          arContainer.appendChild(loadingIndicator);
+          
+        } catch (error) {
+          console.error("AR setup error:", error);
+          document.getElementById("errorContent").textContent = "Failed to access camera: " + error.message;
+          document.getElementById("error").classList.remove("hidden");
+        }
+      }
+      
+      function startTimer(video, seconds) {
+        const timerDisplay = document.getElementById("timerDisplay");
+        timerDisplay.classList.remove("hidden");
+        isTimerActive = true;
+        let countdown = seconds;
+        
+        // Show initial countdown number
+        timerDisplay.textContent = countdown;
+        
+        // Clear any existing interval
+        if (timerInterval) clearInterval(timerInterval);
+        
+        // Start countdown
+        timerInterval = setInterval(() => {
+          countdown--;
+          timerDisplay.textContent = countdown;
+          
+          // Add pulse animation class
+          timerDisplay.classList.add("animate-pulse");
+          setTimeout(() => timerDisplay.classList.remove("animate-pulse"), 200);
+          
+          if (countdown === 0) {
+            clearInterval(timerInterval);
+            timerDisplay.classList.add("hidden");
+            isTimerActive = false;
+            captureAndAnalyze(video);
+          }
+        }, 1000);
+      }
+
+      async function captureAndAnalyze(video) {
+        // Show loading indicator
+        document.getElementById("arLoadingIndicator").classList.remove("hidden");
+        
+        // Capture current frame from video with high quality
+        const canvas = document.createElement("canvas");
+        // Use higher resolution for better analysis
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        
+        // Apply image processing to enhance quality
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        try {
+          // Convert canvas to blob
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 1.0));
+          const formData = new FormData();
+          formData.append('image', blob, 'capture.jpg');
+          
+          // Send to server for analysis
+          const response = await fetch('/analyze', {
+            method: 'POST',
+            body: formData
+          });
+          
+          const data = await response.json();
+          
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          // Save to meal history
+          saveMealToHistory(data);
+          
+          // Process and display results
+          processAnalysisResults(data);
+          
+          // Close AR scanner
+          closeARScanner();
+          
+          // Show results section
+          document.getElementById("result").classList.remove("hidden");
+          
+        } catch (error) {
+          console.error('Analysis error:', error);
+          document.getElementById("errorContent").textContent = error.message;
+          document.getElementById("error").classList.remove("hidden");
+        } finally {
+          document.getElementById("arLoadingIndicator").classList.add("hidden");
+        }
+        document.getElementById("imagePreview").classList.remove("hidden");
+        
+        // Convert to blob and send for analysis with high quality
+        canvas.toBlob(async (blob) => {
+          const formData = new FormData();
+          formData.append("image", blob);
+          try {
+            const response = await fetch("/analyze", {
+              method: "POST",
+              body: formData,
+            });
+            
+            if (!response.ok) {
+              throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.error) {
+              throw new Error(data.error);
+            }
+            
+            // Hide AR scanner and show results
+            closeARScanner();
+            
+            // Process and display the analysis results
+            processAnalysisResults(data);
+            
+          } catch (error) {
+            console.error("AR analysis failed:", error);
+            document.getElementById("errorContent").textContent = error.message;
+            document.getElementById("error").classList.remove("hidden");
+            document.getElementById("arLoadingIndicator").classList.add("hidden");
+          }
+        }, "image/jpeg", 1.0); // Use highest quality for analysis
+      }
+      
+      function closeARScanner() {
+        // Stop all video tracks to release camera
+        if (videoStream) {
+          videoStream.getTracks().forEach((track) => track.stop());
+          videoStream = null;
+        }
+        
+        // Clear any active timer
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          isTimerActive = false;
+        }
+        
+        // Reset timer state
+        timerSeconds = 0;
+        document.getElementById("timerDisplay").classList.add("hidden");
+        document.getElementById("timerButton").classList.remove("bg-blue-500");
+        
+        // Remove loading indicator if it exists
+        const loadingIndicator = document.getElementById("arLoadingIndicator");
+        if (loadingIndicator) loadingIndicator.remove();
+        
+        // Hide the AR container
+        document.getElementById("arContainer").classList.add("hidden");
+      }
+      
+      // Process and display analysis results - used by both upload and AR scanner
+      function processAnalysisResults(data) {
+        // Hide loading indicators
+        loading.classList.add("hidden");
+        document.getElementById("arLoadingIndicator")?.classList.add("hidden");
+        
+        // Clear previous annotations
+        const annotations = document.getElementById("annotations");
+        annotations.innerHTML = "";
+        
+        // Display food annotations
+        if (data.foods && data.foods.length > 0) {
+          data.foods.forEach((food) => {
+            const annotation = createFoodAnnotation(
+              food,
+              preview.width,
+              preview.height
+            );
+            annotations.appendChild(annotation);
+          });
+        }
+        
+        // Update nutrition information display
+        const totalNutrition = document.getElementById("totalNutrition");
+        totalNutrition.innerHTML = `
+          <p>Total Calories: ${data.total.calories} kcal</p>
+          <p>Carbs: ${data.total.carbs}g</p>
+          <p>Proteins: ${data.total.proteins}g</p>
+          <p>Fats: ${data.total.fats}g</p>
+        `;
+        
+        // Update daily value progress bar
+        const dailyValue = document.getElementById("dailyValue");
+        dailyValue.innerHTML = `
+          <div class="w-full bg-gray-200 rounded-full h-2.5">
+            <div class="bg-indigo-600 h-2.5 rounded-full" style="width: ${data.daily_values.calorie_percentage}%"></div>
+          </div>
+          <p class="text-sm mt-1">${data.daily_values.calorie_percentage}% of daily calorie goal (2000 kcal)</p>
+        `;
+        
+        // Update detailed food information
+        const foodDetails = document.getElementById("foodDetails");
+        foodDetails.innerHTML = data.foods
+          .map(
+            (food, index) => `
+            <div class="mb-4 p-3 bg-white rounded border border-gray-200">
+              <h4 class="font-semibold flex items-center">
+                ${food.name}
+                ${food.allergens.length > 0 ? `<span class="ml-2 text-yellow-500" title="Contains allergens">⚠️</span>` : ""}
+              </h4>
+              <div class="flex items-center mt-2">
+                <button onclick="updateServingSize(${index}, -0.5)" class="px-2 bg-gray-200 rounded">-</button>
+                <span class="mx-2">${food.nutrition.serving_multiplier || 1}x serving</span>
+                <button onclick="updateServingSize(${index}, 0.5)" class="px-2 bg-gray-200 rounded">+</button>
+              </div>
+              <p class="text-sm text-gray-600 mt-2">${food.origin}</p>
+              <button onclick="showCulturalInfo('${food.name}', '${food.origin}')" 
+                      class="text-blue-600 text-sm mt-1">Learn More</button>
+              <div class="mt-2">
+                ${food.dietary_labels
+                  .map(
+                    (label) => `
+                  <span class="inline-block bg-gray-100 rounded-full px-3 py-1 text-sm mr-2 mb-2">
+                    ${label}
+                  </span>
+                `
+                  )
+                  .join("")}
+              </div>
+              <div class="mt-2">
+                <p>Per ${food.nutrition.serving_size}:</p>
+                <p>Calories: ${food.nutrition.calories} kcal</p>
+              </div>
+            </div>
+          `
+          )
+          .join("");
+        
+        // Create the macro chart
+        createMacroChart(data);
+        
+        // Update health score
+        const healthScore = document.getElementById("healthScore");
+        healthScore.innerHTML = `
+          <div class="text-xl font-bold mb-2">
+            Health Score: ${data.health_score}/10
+          </div>
+          <div class="text-sm">
+            ${data.health_benefits
+              .map(
+                (benefit) =>
+                  `<div class="text-green-600">✅ ${benefit}</div>`
+              )
+              .join("")}
+            ${data.healthy_alternatives
+              .map((alt) => `<div class="text-yellow-600">⚠️ ${alt}</div>`)
+              .join("")}
+          </div>
+        `;
+        
+        // Show results section
+        document.getElementById("result").classList.remove("hidden");
+        
+        // Save analysis for later use
+        localStorage.setItem("lastAnalysis", JSON.stringify(data));
+      }
+      
+      document.getElementById("closeAR").addEventListener("click", closeARScanner);
+
+      // Event listeners
+      document.getElementById("speakButton").addEventListener("click", () => {
+        const lastAnalysis = JSON.parse(localStorage.getItem("lastAnalysis"));
+        if (lastAnalysis) {
+          speakAnalysis(lastAnalysis);
+        }
+      });
+
+      document.getElementById("syncHealthApp").addEventListener("click", () => {
+        const lastAnalysis = JSON.parse(localStorage.getItem("lastAnalysis"));
+        if (lastAnalysis) {
+          syncWithHealthApp(lastAnalysis);
+        }
+      });
+
+      document.getElementById("startAR").addEventListener("click", () => {
+        document.getElementById("arContainer").classList.remove("hidden");
+        setupAR();
+      });
+    </script>
+  </body>
+</html>
