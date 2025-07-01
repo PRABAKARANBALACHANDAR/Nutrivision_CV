@@ -1,6 +1,6 @@
 # Food Nutrition Analyzer
 
-A web application that uses Google's Gemini API to analyze food images and provide nutritional information.
+A web application that uses a VAE to analyze food images and provide nutritional information.
 
 ## Features
 
@@ -18,17 +18,12 @@ A web application that uses Google's Gemini API to analyze food images and provi
 pip install -r requirements.txt
 ```
 
-2. Create a `.env` file in the project root and add your Google API key:
-```
-GOOGLE_API_KEY=your_api_key_here
-```
-
-3. Run the application:
+2. Run the application:
 ```bash
 python app.py
 ```
 
-4. Open your browser and visit `http://localhost:5000`
+3. Open your browser and visit `http://localhost:5000`
 
 ## Usage
 
